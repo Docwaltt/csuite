@@ -5,8 +5,9 @@ import { useCSuite } from '../store';
 import { generateTeam } from '../services/ai';
 import { Loader2 } from 'lucide-react';
 import { db } from '../firebase';
-import { doc, setDoc, collection } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
+import { INDUSTRIES, CATEGORIES } from '../constants';
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -92,25 +93,31 @@ export function Onboarding() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-zinc-900 mb-2">Industry</label>
-              <input
+              <select
                 required
-                type="text"
                 value={formData.industry}
                 onChange={e => setFormData({...formData, industry: e.target.value})}
-                className="w-full px-4 py-3 rounded-xl border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="e.g. SaaS, Fintech, Healthtech"
-              />
+                className="w-full px-4 py-3 rounded-xl border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+              >
+                <option value="">Select an industry</option>
+                {INDUSTRIES.map(industry => (
+                  <option key={industry} value={industry}>{industry}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-zinc-900 mb-2">Category</label>
-              <input
+              <select
                 required
-                type="text"
                 value={formData.category}
                 onChange={e => setFormData({...formData, category: e.target.value})}
-                className="w-full px-4 py-3 rounded-xl border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                placeholder="e.g. B2B, B2C, Enterprise"
-              />
+                className="w-full px-4 py-3 rounded-xl border border-zinc-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+              >
+                <option value="">Select a category</option>
+                {CATEGORIES.map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
             </div>
           </div>
 

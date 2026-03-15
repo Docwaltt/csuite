@@ -5,6 +5,7 @@ import { chatWithBoardStream } from '../services/ai';
 import { Send, Loader2, Sparkles, Paperclip, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion } from 'motion/react';
+import { Message } from '../types';
 
 export function Boardroom() {
   const { company, team, messages, addMessage } = useCSuite();
@@ -12,7 +13,37 @@ export function Boardroom() {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (editingMessage) {
+      setInput(editingMessage.text);
+    }
+  }, [editingMessage]);
+
+  const [showTagMenu, setShowTagMenu] = useState(false);
+
+  useEffect(() => {
+    if (input.endsWith('@')) {
+      setShowTagMenu(true);
+    } else if (showTagMenu && !input.includes('@')) {
+      setShowTagMenu(false);
+    }
+  }, [input, showTagMenu]);
+
+  const tagAgent = (agentName: string) => {
+    setInput(prev => prev.replace(/@$/, '') + `@${agentName} `);
+    setShowTagMenu(false);
+  };
+
+  const cancelAction = () => {
+    setReplyingTo(null);
+    setEditingMessage(null);
+    setInput('');
+    setShowTagMenu(false);
+  };
 
   // Temporary state for streaming messages before they are finalized
   const [streamingMessages, setStreamingMessages] = useState<Record<string, { text: string, timestamp: number }>>({});
@@ -57,20 +88,26 @@ export function Boardroom() {
 
     let messageText = input.trim();
     if (fileContent) {
-      messageText += `\\n\\n[Attached File: ${file?.name}]\\n\`\`\`\\n${fileContent.substring(0, 10000)}\\n\`\`\``; // Limit to 10k chars for safety
+      messageText += `\n\n[Attached File: ${file?.name}]\n\`\`\`\n${fileContent.substring(0, 10000)}\n\`\`\``;
+    }
+
+    if (editingMessage) {
+      // For now, just log the edit. In a real app, you'd update the message in Firestore.
+      console.log("Editing message", editingMessage.id, messageText);
+      cancelAction();
+      return;
     }
 
     const userMessage = {
       id: uuidv4(),
       companyId: company.id,
       senderId: 'user',
-      text: messageText,
+      text: replyingTo ? `Replying to: "${replyingTo.text.substring(0, 50)}..."\n\n${messageText}` : messageText,
       timestamp: Date.now()
     };
 
     addMessage(userMessage);
-    setInput('');
-    clearFile();
+    cancelAction();
     setLoading(true);
     setStreamingMessages({});
 
@@ -81,14 +118,12 @@ export function Boardroom() {
         messages,
         userMessage.text,
         (agentId) => {
-          // Agent starts speaking
           setStreamingMessages(prev => ({
             ...prev,
             [agentId]: { text: '', timestamp: Date.now() }
           }));
         },
         (agentId, chunk) => {
-          // Agent streams chunk
           setStreamingMessages(prev => {
             const existing = prev[agentId] || { text: '', timestamp: Date.now() };
             return {
@@ -101,11 +136,9 @@ export function Boardroom() {
           });
         },
         (agentId, fullText) => {
-          // Agent finishes speaking
           setStreamingMessages(prev => {
             const timestamp = prev[agentId]?.timestamp || Date.now();
             
-            // Add to firestore
             if (fullText.trim()) {
               addMessage({
                 id: uuidv4(),
@@ -196,6 +229,8 @@ export function Boardroom() {
                   <ChatMessage 
                     message={msg} 
                     agent={team.find(a => a.id === msg.senderId)} 
+                    onReply={setReplyingTo}
+                    onEdit={setEditingMessage}
                   />
                 </motion.div>
               ))}
@@ -216,6 +251,7 @@ export function Boardroom() {
                       timestamp: data.timestamp
                     }} 
                     agent={team.find(a => a.id === agentId)} 
+                    onReply={setReplyingTo}
                   />
                 </motion.div>
               ))}
@@ -234,16 +270,26 @@ export function Boardroom() {
 
       <div className="bg-white border-t border-zinc-200 p-6 flex-shrink-0">
         <div className="max-w-4xl mx-auto">
-          {file && (
+          {(file || replyingTo || editingMessage) && (
             <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-zinc-100 rounded-lg w-fit">
-              <Paperclip className="w-4 h-4 text-zinc-500" />
-              <span className="text-sm font-medium text-zinc-700 truncate max-w-[200px]">{file.name}</span>
-              <button onClick={clearFile} className="p-1 hover:bg-zinc-200 rounded-full text-zinc-500">
+              {file && <Paperclip className="w-4 h-4 text-zinc-500" />}
+              {replyingTo && <span className="text-xs font-semibold text-indigo-600">Replying to: {replyingTo.text.substring(0, 20)}...</span>}
+              {editingMessage && <span className="text-xs font-semibold text-amber-600">Editing message...</span>}
+              <button onClick={cancelAction} className="p-1 hover:bg-zinc-200 rounded-full text-zinc-500">
                 <X className="w-3 h-3" />
               </button>
             </div>
           )}
           <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+            {showTagMenu && (
+              <div className="absolute bottom-full left-0 mb-2 bg-white border border-zinc-200 rounded-lg shadow-lg p-2 z-50">
+                {team.map(agent => (
+                  <button type="button" key={agent.id} onClick={() => tagAgent(agent.name)} className="block w-full text-left px-3 py-2 hover:bg-zinc-100 rounded text-sm">
+                    @{agent.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="relative flex-1">
               <input
                 type="text"

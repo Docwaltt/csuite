@@ -6,13 +6,15 @@ import { cn } from './Layout';
 interface ChatMessageProps {
   message: Message;
   agent?: Agent;
+  onReply?: (message: Message) => void;
+  onEdit?: (message: Message) => void;
 }
 
-export function ChatMessage({ message, agent }: ChatMessageProps) {
+export function ChatMessage({ message, agent, onReply, onEdit }: ChatMessageProps) {
   const isUser = message.senderId === 'user';
 
   return (
-    <div className={cn("flex w-full gap-4 py-4", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex w-full gap-4 py-4 group", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
         <div className="flex-shrink-0">
           <img
@@ -43,13 +45,21 @@ export function ChatMessage({ message, agent }: ChatMessageProps) {
         </div>
         
         <div className={cn(
-          "px-5 py-3.5 rounded-2xl shadow-sm",
+          "px-5 py-3.5 rounded-2xl shadow-sm relative",
           isUser 
             ? "bg-zinc-900 text-white rounded-tr-sm" 
             : "bg-white border border-zinc-200 text-zinc-800 rounded-tl-sm"
         )}>
           <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "")}>
             <Markdown>{message.text}</Markdown>
+          </div>
+          
+          <div className={cn(
+            "absolute -bottom-6 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity",
+            isUser ? "right-0" : "left-0"
+          )}>
+            <button onClick={() => onReply?.(message)} className="text-xs text-zinc-400 hover:text-indigo-600">Reply</button>
+            {isUser && <button onClick={() => onEdit?.(message)} className="text-xs text-zinc-400 hover:text-indigo-600">Edit</button>}
           </div>
         </div>
       </div>

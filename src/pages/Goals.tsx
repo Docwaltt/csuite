@@ -67,7 +67,7 @@ export function Goals() {
       newSmartGoals[index] = { ...item, completed: !currentStatus };
     }
     
-    await updateGoal(goalId, { smartGoals: newSmartGoals });
+    await updateGoal(goalId, { smartGoals: newSmartGoals as any });
     if (!currentStatus) showCelebration("SMART Goal Completed! Great job!");
   };
 
@@ -84,7 +84,7 @@ export function Goals() {
       newKpis[index] = { ...item, met: !currentStatus };
     }
     
-    await updateGoal(goalId, { kpis: newKpis });
+    await updateGoal(goalId, { kpis: newKpis as any });
     if (!currentStatus) showCelebration("KPI Met! Excellent progress!");
   };
 

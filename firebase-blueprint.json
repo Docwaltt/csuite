@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "A company context created by a user.",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "industry": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerId", "name", "industry", "category", "description", "createdAt"]
+    },
+    "Agent": {
+      "title": "Agent",
+      "description": "An AI executive agent assigned to a company.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "role": { "type": "string" },
+        "name": { "type": "string" },
+        "bio": { "type": "string" },
+        "expertise": { "type": "array", "items": { "type": "string" } },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "role", "name", "bio", "expertise", "avatarUrl", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message in the boardroom.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["companyId", "senderId", "text", "timestamp"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "An action item or task for the company.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["companyId", "title", "completed", "createdAt"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "A strategic goal with SMART objectives and KPIs.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "objective": { "type": "string" },
+        "smartGoals": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          } 
+        },
+        "kpis": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "met": { "type": "boolean" }
+            }
+          } 
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["companyId", "objective", "smartGoals", "kpis", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "companies/{companyId}": {
+      "schema": "Company",
+      "description": "Companies created by users."
+    },
+    "companies/{companyId}/agents/{agentId}": {
+      "schema": "Agent",
+      "description": "Agents belonging to a company."
+    },
+    "companies/{companyId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages for a company's boardroom."
+    },
+    "companies/{companyId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Action items and tasks for a company."
+    },
+    "companies/{companyId}/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "Strategic goals for a company."
+    }
+  }
+}

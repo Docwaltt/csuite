@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Users, MessageSquare, Settings, LogOut, Briefcase, Target } from 'lucide-react';
+import { Users, MessageSquare, LogOut, Briefcase, Target, Menu, X } from 'lucide-react';
 import { useCSuite } from '../store';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -13,16 +13,40 @@ export function cn(...inputs: ClassValue[]) {
 export function Layout() {
   const { company, user } = useCSuite();
   const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     await logOut();
     navigate('/');
   };
 
+  const closeMenu = () => setIsMobileMenuOpen(false);
+
   return (
     <div className="flex h-screen bg-zinc-50 text-zinc-900 font-sans">
+      {/* Mobile Menu Toggle */}
+      <div className="md:hidden fixed top-4 left-4 z-50">
+        <button 
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 bg-white rounded-lg shadow-sm border border-zinc-200"
+        >
+          {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={closeMenu}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col">
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-zinc-200 flex flex-col transition-transform duration-300 md:translate-x-0 md:static md:z-0",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         <div className="p-6 border-b border-zinc-200 flex items-center gap-3">
           <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center text-white font-bold">
             C
@@ -34,7 +58,7 @@ export function Layout() {
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 px-2">
             {company ? company.name : 'Workspace'}
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-1" onClick={closeMenu}>
             <NavLink
               to="/dashboard"
               className={({ isActive }) =>
@@ -109,7 +133,7 @@ export function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50/50">
+      <main className="flex-1 flex flex-col overflow-hidden bg-zinc-50/50 pt-16 md:pt-0">
         <Outlet />
       </main>
     </div>

@@ -8,7 +8,7 @@ import { motion } from 'motion/react';
 import { Message } from '../types';
 
 export function Boardroom() {
-  const { company, team, messages, addMessage } = useCSuite();
+  const { company, team, messages, addMessage, updateMessage } = useCSuite();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -92,8 +92,7 @@ export function Boardroom() {
     }
 
     if (editingMessage) {
-      // For now, just log the edit. In a real app, you'd update the message in Firestore.
-      console.log("Editing message", editingMessage.id, messageText);
+      await updateMessage(editingMessage.id, { text: messageText });
       cancelAction();
       return;
     }

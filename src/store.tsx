@@ -15,6 +15,7 @@ interface CSuiteContextType {
   updateAgent: (agentId: string, updates: Partial<Agent>) => Promise<void>;
   messages: Message[];
   addMessage: (message: Message) => void;
+  updateMessage: (messageId: string, updates: Partial<Message>) => Promise<void>;
   clearMessages: () => void;
   tasks: Task[];
   addTask: (task: Task) => Promise<void>;
@@ -117,6 +118,16 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateMessage = async (messageId: string, updates: Partial<Message>) => {
+    if (!company?.id) return;
+    try {
+      await updateDoc(doc(db, `companies/${company.id}/messages`, messageId), updates);
+    } catch (error) {
+      console.error("Error updating message:", error);
+      throw error;
+    }
+  };
+
   const clearMessages = () => {
     // In a real app, you might want to delete them from Firestore or just clear local state.
     // For now, we'll just keep them in Firestore and not delete.
@@ -206,7 +217,7 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
     <CSuiteContext.Provider value={{ 
       user, authReady, company, setCompany, updateCompany, 
       team, setTeam, updateAgent, 
-      messages, addMessage, clearMessages,
+      messages, addMessage, updateMessage, clearMessages,
       tasks, addTask, updateTask, deleteTask,
       goals, addGoal, updateGoal, deleteGoal
     }}>

@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useCSuite } from '../store';
 import { ChatMessage } from '../components/ChatMessage';
 import { chatWithBoardStream } from '../services/ai';
-import { Send, Loader2, Sparkles, Paperclip, X } from 'lucide-react';
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, Volume2, AlertCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Message } from '../types';
+import { useGeminiLive } from '../hooks/useGeminiLive';
+import { cn } from '../components/Layout';
 
 export function Boardroom() {
   const { company, team, messages, addMessage, updateMessage } = useCSuite();
@@ -15,7 +17,23 @@ export function Boardroom() {
   const [fileContent, setFileContent] = useState<string>('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isConnected, isRecording, error: voiceError, connect, disconnect } = useGeminiLive({
+    company: company!,
+    team,
+  });
+
+  const toggleVoiceMode = () => {
+    if (voiceMode) {
+      disconnect();
+      setVoiceMode(false);
+    } else {
+      setVoiceMode(true);
+      connect();
+    }
+  };
 
   useEffect(() => {
     if (editingMessage) {
@@ -185,7 +203,29 @@ export function Boardroom() {
             <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">The Boardroom</h1>
             <p className="text-sm text-zinc-500">Discuss strategy with your executive team.</p>
           </div>
-          <div className="flex -space-x-2">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={toggleVoiceMode}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all shadow-sm border",
+                voiceMode 
+                  ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100" 
+                  : "bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50"
+              )}
+            >
+              {voiceMode ? (
+                <>
+                  <MicOff className="w-4 h-4" />
+                  Exit Voice Mode
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4" />
+                  Start Voice Discussion
+                </>
+              )}
+            </button>
+            <div className="flex -space-x-2">
             {team.slice(0, 5).map(agent => (
               <img
                 key={agent.id}
@@ -203,9 +243,84 @@ export function Boardroom() {
             )}
           </div>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 relative">
+        <AnimatePresence>
+          {voiceMode && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="absolute inset-0 z-30 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center"
+            >
+              <div className="max-w-md w-full">
+                <div className="relative mb-12">
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="w-32 h-32 bg-indigo-100 rounded-full flex items-center justify-center mx-auto"
+                  >
+                    <div className="w-24 h-24 bg-indigo-500 rounded-full flex items-center justify-center text-white">
+                      {isConnected ? <Volume2 className="w-12 h-12" /> : <Loader2 className="w-12 h-12 animate-spin" />}
+                    </div>
+                  </motion.div>
+                  {isConnected && (
+                    <motion.div
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                      className="absolute -top-4 -right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider"
+                    >
+                      Live
+                    </motion.div>
+                  )}
+                </div>
+
+                <h2 className="text-2xl font-bold text-zinc-900 mb-4">
+                  {isConnected ? "Voice Discussion Active" : "Connecting to Boardroom..."}
+                </h2>
+                <p className="text-zinc-600 mb-8">
+                  {isConnected 
+                    ? "The board is listening. You can speak naturally and interrupt at any time." 
+                    : "Preparing the executive team for a voice session."}
+                </p>
+
+                {voiceError && (
+                  <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-xl mb-8 text-sm">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <p>{voiceError}</p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap justify-center gap-4">
+                  {team.map(agent => (
+                    <div key={agent.id} className="flex flex-col items-center gap-2">
+                      <img 
+                        src={agent.avatarUrl} 
+                        alt={agent.name} 
+                        className={cn(
+                          "w-12 h-12 rounded-full border-2 transition-all",
+                          isConnected ? "border-indigo-500" : "border-zinc-200 grayscale"
+                        )}
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="text-[10px] font-medium text-zinc-500">{agent.role.split(' ')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={toggleVoiceMode}
+                  className="mt-12 px-8 py-3 bg-zinc-900 text-white rounded-full font-medium hover:bg-zinc-800 transition-colors"
+                >
+                  End Voice Session
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="max-w-4xl mx-auto space-y-2">
           {messages.length === 0 && Object.keys(streamingMessages).length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">

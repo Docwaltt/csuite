@@ -55,11 +55,13 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     setActiveAgentId(null);
   }, []);
 
+  const teamRef = useRef(team);
+  useEffect(() => {
+    teamRef.current = team;
+  }, [team]);
+
   const playNextChunk = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || isPlayingRef.current || !audioContextRef.current) {
-      if (audioQueueRef.current.length === 0) {
-        setActiveAgentId(null);
-      }
       return;
     }
 
@@ -159,9 +161,12 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     }
   };
 
+  const transcriptionBufferRef = useRef('');
+
   const connect = useCallback(async () => {
     try {
       setError(null);
+      transcriptionBufferRef.current = '';
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const systemInstruction = `You are the virtual C-Suite board of ${company.name}. 
@@ -196,7 +201,7 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
       - Use natural fillers like "Well...", "I see...", "That's a great point...", or "Actually..." to sound more human.
       - If one board member hands off to another, do it naturally: "I think our CTO, ${team.find(a => a.role.toLowerCase().includes('tech') || a.role.toLowerCase().includes('cto'))?.name || 'the CTO'}, has some thoughts on the technical side of this."
       
-      CRITICAL: When you start speaking as a specific board member, you MUST include their name in the transcription output like "[Name]: ". This helps the UI identify who is speaking.
+      CRITICAL: When you start speaking as a specific board member, you MUST start your response with their name in brackets followed by a colon, exactly like this: "[Name]: ". This is the ONLY way the UI can highlight the correct speaker. Use the member's full name from the list above.
       
       CRITICAL INTERRUPTION HANDLING:
       1. You can be interrupted at any time. 
@@ -233,12 +238,25 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.text) {
-                  const match = part.text.match(/\[(.*?)\]:/);
-                  if (match) {
-                    const name = match[1];
-                    const agent = team.find(a => a.name.includes(name) || name.includes(a.name));
+                  // Accumulate text to handle split chunks
+                  transcriptionBufferRef.current += part.text;
+                  
+                  // Robust regex to find speaker identifiers in the accumulated buffer
+                  // Matches: [Name]:, Name:, [Role]:, Role:
+                  const speakerMatch = transcriptionBufferRef.current.match(/(?:\[)?(.*?)(?:\])?\s*:/);
+                  if (speakerMatch) {
+                    const identifier = speakerMatch[1].trim().toLowerCase();
+                    const agent = teamRef.current.find(a => 
+                      a.name.toLowerCase().includes(identifier) || 
+                      identifier.includes(a.name.toLowerCase()) ||
+                      a.role.toLowerCase().includes(identifier) ||
+                      identifier.includes(a.role.toLowerCase())
+                    );
                     if (agent) {
                       setActiveAgentId(agent.id);
+                      // Once we've identified the speaker, we can clear the buffer 
+                      // to prevent re-matching or matching wrong things later in the turn
+                      transcriptionBufferRef.current = ''; 
                     }
                   }
                 }
@@ -257,6 +275,10 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
               }
             }
             
+            if (message.serverContent?.turnComplete) {
+              transcriptionBufferRef.current = '';
+            }
+            
             if (message.serverContent?.interrupted) {
               if (currentSourceRef.current) {
                 currentSourceRef.current.stop();
@@ -266,6 +288,7 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
               isPlayingRef.current = false;
               setIsThinking(false);
               setActiveAgentId(null);
+              transcriptionBufferRef.current = '';
             }
           },
           onclose: () => {

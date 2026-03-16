@@ -5,7 +5,7 @@ import { chatWithBoardStream } from '../services/ai';
 import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, Volume2, AlertCircle, Plus, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'motion/react';
-import { Message } from '../types';
+import { Message, Agent } from '../types';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import { cn } from '../components/Layout';
 
@@ -21,6 +21,7 @@ export function Boardroom() {
   const [meetingDuration, setMeetingDuration] = useState(0);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [sharedCount, setSharedCount] = useState(0);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { isConnected, isRecording, error: voiceError, volume, isThinking, activeAgentId, isMuted, setIsMuted, connect, disconnect, sendImage, sendText } = useGeminiLive({
@@ -402,9 +403,10 @@ export function Boardroom() {
                   <motion.div
                     key={agent.id}
                     layout
+                    onClick={() => setSelectedAgent(agent)}
                     className={cn(
-                      "relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border-2 transition-all duration-500 group",
-                      activeAgentId === agent.id ? "border-indigo-500 shadow-lg shadow-indigo-500/40 scale-[1.02]" : "border-zinc-800",
+                      "relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border-2 transition-all duration-500 group cursor-pointer",
+                      activeAgentId === agent.id ? "border-indigo-500 shadow-lg shadow-indigo-500/20 scale-[1.02]" : "border-zinc-800 hover:border-zinc-700",
                       isThinking && "animate-pulse shadow-indigo-500/10"
                     )}
                   >
@@ -413,18 +415,27 @@ export function Boardroom() {
                       alt={agent.name} 
                       className={cn(
                         "w-full h-full object-cover transition-all duration-700",
-                        activeAgentId === agent.id ? "opacity-100 scale-110" : "opacity-40 grayscale"
+                        activeAgentId === agent.id ? "opacity-100 scale-110" : "opacity-60 grayscale-[0.5] group-hover:opacity-40 group-hover:scale-105"
                       )}
                       referrerPolicy="no-referrer"
                     />
                     
+                    {/* Hover Info Overlay */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-center p-6 text-center">
+                      <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest mb-1">{agent.role}</p>
+                      <p className="text-white text-sm line-clamp-3 italic">"{agent.bio.substring(0, 120)}..."</p>
+                      <div className="mt-4 flex justify-center">
+                        <span className="text-[10px] bg-white/10 text-white/60 px-2 py-1 rounded-full border border-white/10">Click for full profile</span>
+                      </div>
+                    </div>
+
                     {/* Agent Speaking Overlay */}
                     {activeAgentId === agent.id && (
                       <div className="absolute inset-0 pointer-events-none">
                         <motion.div 
-                          animate={{ opacity: [0, 0.4, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity }}
-                          className="absolute inset-0 bg-indigo-500/20 ring-inset ring-4 ring-indigo-500/50"
+                          animate={{ opacity: [0, 0.2, 0] }}
+                          transition={{ duration: 1, repeat: Infinity }}
+                          className="absolute inset-0 bg-indigo-500/10 ring-inset ring-4 ring-indigo-500/30"
                         />
                         <div className="absolute top-4 right-4">
                           <motion.div
@@ -480,8 +491,8 @@ export function Boardroom() {
                           {[1, 2, 3, 4].map(i => (
                             <motion.div
                               key={i}
-                              animate={{ height: [4, 16, 4] }}
-                              transition={{ duration: 0.4, delay: i * 0.1, repeat: Infinity }}
+                              animate={{ height: [4, 12, 4] }}
+                              transition={{ duration: 0.3, delay: i * 0.1, repeat: Infinity }}
                               className="w-1 bg-indigo-500 rounded-full"
                             />
                           ))}
@@ -521,6 +532,81 @@ export function Boardroom() {
                       <input type="file" className="hidden" onChange={handleShareFile} />
                     </label>
                   </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Agent Bio Modal */}
+              <AnimatePresence>
+                {selectedAgent && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setSelectedAgent(null)}
+                      className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                      className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl"
+                    >
+                      <button 
+                        onClick={() => setSelectedAgent(null)}
+                        className="absolute top-6 right-6 w-10 h-10 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors z-10"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+
+                      <div className="flex flex-col md:flex-row h-full">
+                        <div className="w-full md:w-2/5 aspect-square md:aspect-auto relative">
+                          <img 
+                            src={selectedAgent.avatarUrl} 
+                            alt={selectedAgent.name} 
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent md:bg-gradient-to-r" />
+                        </div>
+
+                        <div className="flex-1 p-8 md:p-10">
+                          <div className="mb-6">
+                            <span className="text-indigo-400 text-xs font-bold uppercase tracking-widest block mb-2">{selectedAgent.role}</span>
+                            <h2 className="text-3xl font-bold text-white mb-1">{selectedAgent.name}</h2>
+                          </div>
+
+                          <div className="space-y-6">
+                            <div>
+                              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-2">Professional Bio</h3>
+                              <p className="text-zinc-300 text-sm leading-relaxed italic">
+                                "{selectedAgent.bio}"
+                              </p>
+                            </div>
+
+                            <div>
+                              <h3 className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-2">Core Expertise</h3>
+                              <div className="flex flex-wrap gap-2">
+                                {selectedAgent.expertise.map((skill, idx) => (
+                                  <span 
+                                    key={idx}
+                                    className="bg-indigo-500/10 text-indigo-300 text-[10px] font-bold px-3 py-1 rounded-full border border-indigo-500/20"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-10 pt-6 border-t border-zinc-800 flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider">Active in current session</span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
                 )}
               </AnimatePresence>
 

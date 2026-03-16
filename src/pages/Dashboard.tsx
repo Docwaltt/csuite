@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useCSuite } from '../store';
 import { motion } from 'motion/react';
-import { Building2, Users, Target, ArrowRight, Pencil, Check, X, Plus, Trash2, CheckCircle2, Circle } from 'lucide-react';
+import { Building2, Users, Target, ArrowRight, Pencil, Check, X, Plus, Trash2, CheckCircle2, Circle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 
 export function Dashboard() {
-  const { company, team, updateCompany, tasks, addTask, updateTask, deleteTask } = useCSuite();
+  const { company, companyLoading, team, updateCompany, tasks, addTask, updateTask, deleteTask } = useCSuite();
   const navigate = useNavigate();
   
   const [isEditing, setIsEditing] = useState(false);
@@ -14,6 +14,14 @@ export function Dashboard() {
   const [isSaving, setIsSaving] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [isAddingTask, setIsAddingTask] = useState(false);
+
+  if (companyLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
 
   if (!company) {
     return (

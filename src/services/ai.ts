@@ -114,7 +114,7 @@ export async function chatWithBoardStream(
   onStreamChunk: (agentId: string, chunk: string) => void,
   onAgentComplete: (agentId: string, fullText: string) => void
 ): Promise<void> {
-  const systemInstruction = `You are the CEO/Orchestrator of a virtual C-Suite boardroom for a startup.
+  const systemInstruction = `You are the CEO and Orchestrator of a virtual C-Suite boardroom for a startup.
   Company Context:
   Name: ${company.name}
   Industry: ${company.industry}
@@ -125,8 +125,14 @@ export async function chatWithBoardStream(
   ${team.map(a => `- ${a.id} (${a.role}): ${a.bio}. Expertise: ${a.expertise.join(", ")}`).join("\\n")}
 
   The user is the Founder/Chairperson addressing the board.
-  Determine which 1 to 3 board members should respond to the user's message based on their specific roles and expertise.
-  Return a JSON array of their agent IDs in the order they should speak.
+  
+  ROLE-BASED ADDRESSING:
+  - If the Founder addresses a specific role (e.g., "CEO", "CTO"), that specific board member MUST be included in the response list.
+  - If the Founder addresses the "Board" or "Team" generally, select the most relevant 1 to 3 members.
+  
+  Your task:
+  1. Determine which 1 to 3 board members should respond to the user's message based on their specific roles and expertise.
+  2. Return a JSON array of their agent IDs in the order they should speak.
   `;
 
   const chatHistoryText = history.map(msg => {
@@ -182,8 +188,16 @@ export async function chatWithBoardStream(
     Your Expertise: ${agent.expertise.join(", ")}
 
     The Founder has addressed the board. Respond from your specific perspective and expertise.
-    Keep your response concise, actionable, and professional. Use markdown.
-    Do not introduce yourself, just give your advice.
+    
+    VOICE & PERSONALITY:
+    - DO NOT sound like a robotic AI assistant.
+    - Use natural, human-like speech patterns.
+    - Use professional yet conversational language.
+    - Be decisive and strategic.
+    
+    INSTRUCTIONS:
+    - Keep your response concise, actionable, and professional. Use markdown.
+    - Do not introduce yourself (e.g., "Hi, I'm the CEO"), just give your advice directly as the character.
     
     Current Conversation:
     ${currentHistory}

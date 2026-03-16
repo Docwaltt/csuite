@@ -11,8 +11,15 @@ import { INDUSTRIES, CATEGORIES } from '../constants';
 
 export function Onboarding() {
   const navigate = useNavigate();
-  const { user, setCompany, setTeam } = useCSuite();
+  const { user, authReady, company, companyLoading, setCompany, setTeam } = useCSuite();
   const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    if (authReady && !companyLoading && company) {
+      navigate('/dashboard');
+    }
+  }, [authReady, companyLoading, company, navigate]);
+
   const [formData, setFormData] = useState({
     name: '',
     industry: '',

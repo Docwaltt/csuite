@@ -8,6 +8,7 @@ interface CSuiteContextType {
   user: User | null;
   authReady: boolean;
   company: CompanyContext | null;
+  companyLoading: boolean;
   setCompany: (company: CompanyContext | null) => void;
   updateCompany: (updates: Partial<CompanyContext>) => Promise<void>;
   team: Agent[];
@@ -33,6 +34,7 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [company, setCompany] = useState<CompanyContext | null>(null);
+  const [companyLoading, setCompanyLoading] = useState(true);
   const [team, setTeam] = useState<Agent[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -65,6 +67,7 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
       } else {
         setCompany(null);
       }
+      setCompanyLoading(false);
     });
 
     return () => unsubscribe();
@@ -215,7 +218,7 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
 
   return (
     <CSuiteContext.Provider value={{ 
-      user, authReady, company, setCompany, updateCompany, 
+      user, authReady, company, companyLoading, setCompany, updateCompany, 
       team, setTeam, updateAgent, 
       messages, addMessage, updateMessage, clearMessages,
       tasks, addTask, updateTask, deleteTask,

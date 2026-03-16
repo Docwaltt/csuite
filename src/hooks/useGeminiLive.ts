@@ -12,6 +12,13 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
   const [isConnected, setIsConnected] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [volume, setVolume] = useState(0);
+  const [isThinking, setIsThinking] = useState(false);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  
+  const isConnectedRef = useRef(false);
+  const isMutedRef = useRef(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -20,6 +27,10 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
   const audioQueueRef = useRef<Int16Array[]>([]);
   const isPlayingRef = useRef(false);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   const stopAudio = useCallback(() => {
     if (streamRef.current) {
@@ -39,10 +50,16 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
       audioContextRef.current = null;
     }
     setIsRecording(false);
+    setVolume(0);
+    setIsThinking(false);
+    setActiveAgentId(null);
   }, []);
 
   const playNextChunk = useCallback(async () => {
     if (audioQueueRef.current.length === 0 || isPlayingRef.current || !audioContextRef.current) {
+      if (audioQueueRef.current.length === 0) {
+        setActiveAgentId(null);
+      }
       return;
     }
 
@@ -72,8 +89,79 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     source.start();
   }, []);
 
+  const startRecording = async () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      }
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
+      processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+
+      processorRef.current.onaudioprocess = (e) => {
+        if (!sessionRef.current || !isConnectedRef.current || isMutedRef.current) {
+          if (isMutedRef.current) setVolume(0);
+          return;
+        }
+
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Calculate volume for visualizer
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        setVolume(rms);
+
+        // If user is speaking, they are likely triggering a "thinking" state from the AI
+        if (rms > 0.05 && !isPlayingRef.current) {
+          setIsThinking(true);
+        }
+
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+        }
+
+        // More robust base64 conversion
+        const uint8Array = new Uint8Array(pcmData.buffer);
+        let binary = '';
+        const len = uint8Array.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(uint8Array[i]);
+        }
+        const base64Data = btoa(binary);
+
+        sessionRef.current.sendRealtimeInput({
+          media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+        });
+      };
+
+      source.connect(processorRef.current);
+      
+      // Mute the monitor so user doesn't hear themselves
+      const gainNode = audioContextRef.current.createGain();
+      gainNode.gain.value = 0;
+      processorRef.current.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      setError("Microphone access denied.");
+    }
+  };
+
   const connect = useCallback(async () => {
     try {
+      setError(null);
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const systemInstruction = `You are the virtual C-Suite board of ${company.name}. 
@@ -81,17 +169,41 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
       ${team.map(a => `- ${a.name} (${a.role}): ${a.bio}`).join('\n')}
       
       You are in a real-time voice discussion with the Founder. 
-      You should respond as the appropriate board members. 
+      You are NOT an AI assistant; you ARE the board members. 
+      
+      ROLE-BASED ADDRESSING:
+      - If the Founder addresses a specific role (e.g., "CEO", "CFO", "Marketing Lead"), that specific board member MUST take the lead and respond first.
+      - If the Founder addresses the "Board" or "Team" generally, the CEO should typically lead, but other members can chime in if the topic is relevant to their expertise.
+      - You must recognize roles like "CEO", "CTO", "CFO", etc., and respond accordingly.
+      
+      SHARED RESOURCES (FILES & LINKS):
+      - The Founder may share images, documents (as images or text), or links during the meeting.
+      - When a resource is shared, acknowledge it and discuss its implications for the company.
+      - Use your expertise to analyze the shared content.
+      - If a link is shared, you can use your tools to understand its context if necessary.
+      
+      VOICE & HUMANITY:
+      - NEVER use robotic meta-talk (e.g., "The CEO will now speak" or "I am switching to the CTO").
+      - Speak DIRECTLY as the board members. 
+      - Use natural, human-like speech patterns. 
+      - DISTINCT VOCAL PERSONALITIES: Even though you are using one voice stream, you MUST use your acting capabilities to distinguish members:
+        * CEO: Authoritative, steady, slightly deeper pitch.
+        * CTO: Faster pace, technical enthusiasm, energetic.
+        * CFO: Precise, measured, calm, analytical.
+        * CMO: Creative, expressive, varied intonation.
+      - Vary your tone, pace, and vocabulary based on the specific board member who is speaking. 
+      - Use professional yet conversational language. 
+      - Use natural fillers like "Well...", "I see...", "That's a great point...", or "Actually..." to sound more human.
+      - If one board member hands off to another, do it naturally: "I think our CTO, ${team.find(a => a.role.toLowerCase().includes('tech') || a.role.toLowerCase().includes('cto'))?.name || 'the CTO'}, has some thoughts on the technical side of this."
+      
+      CRITICAL: When you start speaking as a specific board member, you MUST include their name in the transcription output like "[Name]: ". This helps the UI identify who is speaking.
       
       CRITICAL INTERRUPTION HANDLING:
       1. You can be interrupted at any time. 
-      2. If the Founder interrupts you, STOP speaking immediately (the system handles the audio cut, but you must pivot your thought).
-      3. Acknowledge the interruption gracefully (e.g., "I see your point," or "That's a valid concern").
-      4. Address the new concern or question immediately.
-      5. After addressing the new point, try to re-contextualize or repurpose what you were saying before the interruption to align with the new direction.
+      2. If the Founder interrupts you, STOP speaking immediately.
+      3. Acknowledge the interruption gracefully and address the new point.
       
-      Keep responses concise, conversational, and professional.
-      When a specific member speaks, start with "[Name]: " in your transcription if possible, but focus on the audio.
+      Keep responses concise, high-impact, and focused on strategic value.
       `;
 
       const session = await ai.live.connect({
@@ -99,19 +211,40 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+            voiceConfig: { 
+              prebuiltVoiceConfig: { 
+                // "Aoede" is often considered very human-like, but let's stick to the ones in the prompt if they are the only ones.
+                // Actually, "Zephyr" is fine, but let's ensure the prompt drives the "human" feel.
+                voiceName: "Zephyr" 
+              } 
+            },
           },
           systemInstruction,
+          outputAudioTranscription: {},
         },
         callbacks: {
           onopen: () => {
             setIsConnected(true);
+            isConnectedRef.current = true;
             startRecording();
           },
           onmessage: async (message: LiveServerMessage) => {
+            // Handle transcription to identify active agent
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
+                if (part.text) {
+                  const match = part.text.match(/\[(.*?)\]:/);
+                  if (match) {
+                    const name = match[1];
+                    const agent = team.find(a => a.name.includes(name) || name.includes(a.name));
+                    if (agent) {
+                      setActiveAgentId(agent.id);
+                    }
+                  }
+                }
+                
                 if (part.inlineData?.data) {
+                  setIsThinking(false); // Stop thinking when audio starts arriving
                   const binaryString = atob(part.inlineData.data);
                   const bytes = new Uint8Array(binaryString.length);
                   for (let i = 0; i < binaryString.length; i++) {
@@ -125,23 +258,26 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
             }
             
             if (message.serverContent?.interrupted) {
-              // Stop current playback immediately
               if (currentSourceRef.current) {
                 currentSourceRef.current.stop();
                 currentSourceRef.current = null;
               }
               audioQueueRef.current = [];
               isPlayingRef.current = false;
+              setIsThinking(false);
+              setActiveAgentId(null);
             }
           },
           onclose: () => {
             setIsConnected(false);
+            isConnectedRef.current = false;
             stopAudio();
           },
           onerror: (err) => {
             console.error("Live API Error:", err);
             setError("Connection error. Please try again.");
             setIsConnected(false);
+            isConnectedRef.current = false;
             stopAudio();
           }
         }
@@ -154,38 +290,6 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     }
   }, [company, team, stopAudio, playNextChunk]);
 
-  const startRecording = async () => {
-    try {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
-      processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
-
-      processorRef.current.onaudioprocess = (e) => {
-        if (!sessionRef.current || !isConnected) return;
-
-        const inputData = e.inputBuffer.getChannelData(0);
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-        }
-
-        const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-        sessionRef.current.sendRealtimeInput({
-          media: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-        });
-      };
-
-      source.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Failed to start recording:", err);
-      setError("Microphone access denied.");
-    }
-  };
-
   const disconnect = useCallback(() => {
     if (sessionRef.current) {
       sessionRef.current.close();
@@ -193,7 +297,25 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     }
     stopAudio();
     setIsConnected(false);
+    isConnectedRef.current = false;
   }, [stopAudio]);
+
+  const sendImage = useCallback((base64Data: string, mimeType: string) => {
+    if (sessionRef.current && isConnectedRef.current) {
+      sessionRef.current.sendRealtimeInput({
+        media: { data: base64Data, mimeType }
+      });
+    }
+  }, []);
+
+  const sendText = useCallback((text: string) => {
+    if (sessionRef.current && isConnectedRef.current) {
+      // For Live API, we send text as a message part
+      sessionRef.current.sendRealtimeInput({
+        text
+      });
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -205,7 +327,14 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
     isConnected,
     isRecording,
     error,
+    volume,
+    isThinking,
+    activeAgentId,
+    isMuted,
+    setIsMuted,
     connect,
-    disconnect
+    disconnect,
+    sendImage,
+    sendText
   };
 }

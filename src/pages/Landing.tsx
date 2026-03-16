@@ -7,17 +7,17 @@ import { signInWithGoogle } from '../firebase';
 
 export function Landing() {
   const navigate = useNavigate();
-  const { user, authReady, company } = useCSuite();
+  const { user, authReady, company, companyLoading } = useCSuite();
 
   useEffect(() => {
-    if (authReady && user) {
+    if (authReady && user && !companyLoading) {
       if (company) {
         navigate('/dashboard');
       } else {
         navigate('/onboarding');
       }
     }
-  }, [user, authReady, company, navigate]);
+  }, [user, authReady, company, companyLoading, navigate]);
 
   const handleGetStarted = async () => {
     if (!user) {

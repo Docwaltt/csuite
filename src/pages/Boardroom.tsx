@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useCSuite } from '../store';
 import { ChatMessage } from '../components/ChatMessage';
 import { chatWithBoardStream } from '../services/ai';
-import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, Volume2, AlertCircle } from 'lucide-react';
+import { Send, Loader2, Sparkles, Paperclip, X, Mic, MicOff, Volume2, AlertCircle, Plus, Link as LinkIcon, Image as ImageIcon } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence } from 'motion/react';
 import { Message } from '../types';
@@ -10,7 +10,7 @@ import { useGeminiLive } from '../hooks/useGeminiLive';
 import { cn } from '../components/Layout';
 
 export function Boardroom() {
-  const { company, team, messages, addMessage, updateMessage } = useCSuite();
+  const { user, company, companyLoading, team, messages, addMessage, updateMessage } = useCSuite();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -18,17 +18,96 @@ export function Boardroom() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [meetingDuration, setMeetingDuration] = useState(0);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [sharedCount, setSharedCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { isConnected, isRecording, error: voiceError, connect, disconnect } = useGeminiLive({
+  const { isConnected, isRecording, error: voiceError, volume, isThinking, activeAgentId, isMuted, setIsMuted, connect, disconnect, sendImage, sendText } = useGeminiLive({
     company: company!,
     team,
   });
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (voiceMode && isConnected) {
+      interval = setInterval(() => {
+        setMeetingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      setMeetingDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [voiceMode, isConnected]);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleShareLink = () => {
+    const url = prompt("Enter a link to share with the board:");
+    if (url) {
+      sendText(`Founder shared a link: ${url}. Please review and discuss.`);
+      setSharedCount(prev => prev + 1);
+      addMessage({
+        id: uuidv4(),
+        companyId: company!.id,
+        senderId: 'user',
+        text: `Shared a link: ${url}`,
+        timestamp: Date.now()
+      });
+      setShowShareMenu(false);
+    }
+  };
+
+  const handleShareFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = (event.target?.result as string).split(',')[1];
+          sendImage(base64, file.type);
+          setSharedCount(prev => prev + 1);
+          addMessage({
+            id: uuidv4(),
+            companyId: company!.id,
+            senderId: 'user',
+            text: `Shared an image: ${file.name}`,
+            timestamp: Date.now()
+          });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const text = await file.text();
+        sendText(`Founder shared a document (${file.name}):\n\n${text}\n\nPlease review and discuss.`);
+        setSharedCount(prev => prev + 1);
+        addMessage({
+          id: uuidv4(),
+          companyId: company!.id,
+          senderId: 'user',
+          text: `Shared a document: ${file.name}`,
+          timestamp: Date.now()
+        });
+      }
+      setShowShareMenu(false);
+    } catch (err) {
+      console.error("Failed to share file", err);
+      alert("Could not share file.");
+    }
+  };
 
   const toggleVoiceMode = () => {
     if (voiceMode) {
       disconnect();
       setVoiceMode(false);
+      setIsMuted(false);
+      setShowShareMenu(false);
+      setSharedCount(0);
     } else {
       setVoiceMode(true);
       connect();
@@ -187,6 +266,14 @@ export function Boardroom() {
     }
   };
 
+  if (companyLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
   if (!company) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -196,7 +283,304 @@ export function Boardroom() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-zinc-50 font-sans">
+    <div className="flex-1 flex flex-col h-full bg-zinc-50 font-sans relative">
+      <AnimatePresence>
+        {voiceMode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col overflow-hidden"
+          >
+            {/* Meeting Header */}
+            <div className="p-6 flex items-center justify-between bg-gradient-to-b from-black/50 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
+                  <Volume2 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-white font-bold tracking-tight">Executive Strategy Session</h2>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider">Live Discussion</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {isThinking && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="bg-indigo-500/20 text-indigo-400 px-4 py-2 rounded-full text-xs font-bold border border-indigo-500/30 flex items-center gap-2"
+                  >
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Processing Strategy...
+                  </motion.div>
+                )}
+                <div className="text-zinc-500 text-sm font-mono flex flex-col items-end">
+                  <div className="text-white font-bold">{formatDuration(meetingDuration)}</div>
+                  {sharedCount > 0 && (
+                    <div className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                      <Paperclip className="w-3 h-3" />
+                      {sharedCount} SHARED
+                    </div>
+                  )}
+                  <div>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Meeting Grid */}
+            <div className="flex-1 p-8 overflow-y-auto">
+              <div className={cn(
+                "grid gap-6 max-w-6xl mx-auto h-full content-center",
+                team.length + 1 <= 2 ? "grid-cols-1 md:grid-cols-2" : 
+                team.length + 1 <= 4 ? "grid-cols-2" : 
+                "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+              )}>
+                {/* Founder (User) Tile */}
+                <motion.div
+                  layout
+                  className={cn(
+                    "relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border-2 transition-all duration-500 group",
+                    isConnected && isRecording && volume > 0.02 && !isMuted ? "border-emerald-500 shadow-lg shadow-emerald-500/20 scale-[1.02]" : "border-zinc-800"
+                  )}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt="Founder" className="w-full h-full object-cover opacity-60" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-24 h-24 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-600 text-3xl font-bold">
+                        {user?.email?.[0].toUpperCase() || 'F'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* User Visualizer Overlay */}
+                  {isConnected && isRecording && volume > 0.02 && !isMuted && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <motion.div 
+                        animate={{ opacity: [0, 0.2, 0] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="absolute inset-0 bg-emerald-500/10 ring-inset ring-4 ring-emerald-500/30"
+                      />
+                      <div className="absolute top-4 right-4">
+                        <motion.div
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-lg border border-emerald-400"
+                        >
+                          <Mic className="w-3 h-3" />
+                          SPEAKING
+                        </motion.div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                    <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg flex items-center gap-2 border border-white/10">
+                      <div className={cn("w-2 h-2 rounded-full", isMuted ? "bg-red-500" : "bg-emerald-500")} />
+                      <span className="text-white text-xs font-bold">Founder (You) {isMuted && "(Muted)"}</span>
+                    </div>
+                    {isConnected && isRecording && volume > 0.02 && !isMuted && (
+                      <div className="flex gap-0.5 items-end h-4">
+                        {[1, 2, 3, 4].map(i => (
+                          <motion.div
+                            key={i}
+                            animate={{ height: [4, 12, 4] }}
+                            transition={{ duration: 0.3, delay: i * 0.1, repeat: Infinity }}
+                            className="w-1 bg-emerald-500 rounded-full"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Agent Tiles */}
+                {team.map(agent => (
+                  <motion.div
+                    key={agent.id}
+                    layout
+                    className={cn(
+                      "relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border-2 transition-all duration-500 group",
+                      activeAgentId === agent.id ? "border-indigo-500 shadow-lg shadow-indigo-500/40 scale-[1.02]" : "border-zinc-800",
+                      isThinking && "animate-pulse shadow-indigo-500/10"
+                    )}
+                  >
+                    <img 
+                      src={agent.avatarUrl} 
+                      alt={agent.name} 
+                      className={cn(
+                        "w-full h-full object-cover transition-all duration-700",
+                        activeAgentId === agent.id ? "opacity-100 scale-110" : "opacity-40 grayscale"
+                      )}
+                      referrerPolicy="no-referrer"
+                    />
+                    
+                    {/* Agent Speaking Overlay */}
+                    {activeAgentId === agent.id && (
+                      <div className="absolute inset-0 pointer-events-none">
+                        <motion.div 
+                          animate={{ opacity: [0, 0.4, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                          className="absolute inset-0 bg-indigo-500/20 ring-inset ring-4 ring-indigo-500/50"
+                        />
+                        <div className="absolute top-4 right-4">
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 shadow-lg border border-indigo-400"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                            SPEAKING
+                          </motion.div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Thinking Indicator Overlay */}
+                    {isThinking && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="flex gap-1">
+                          {[0, 1, 2].map((i) => (
+                            <motion.div
+                              key={i}
+                              animate={{ 
+                                scale: [1, 1.5, 1],
+                                opacity: [0.3, 1, 0.3]
+                              }}
+                              transition={{ 
+                                duration: 1, 
+                                repeat: Infinity, 
+                                delay: i * 0.2 
+                              }}
+                              className="w-2 h-2 bg-indigo-400 rounded-full"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                      <div className={cn(
+                        "backdrop-blur-md px-3 py-1.5 rounded-lg flex flex-col border transition-colors duration-300",
+                        activeAgentId === agent.id 
+                          ? "bg-indigo-600/80 border-indigo-400/50" 
+                          : "bg-black/60 border-white/10"
+                      )}>
+                        <span className="text-white text-xs font-bold">{agent.name}</span>
+                        <span className={cn(
+                          "text-[10px] font-medium uppercase tracking-tighter",
+                          activeAgentId === agent.id ? "text-indigo-100" : "text-zinc-400"
+                        )}>{agent.role}</span>
+                      </div>
+                      {activeAgentId === agent.id && (
+                        <div className="flex gap-0.5 items-end h-4">
+                          {[1, 2, 3, 4].map(i => (
+                            <motion.div
+                              key={i}
+                              animate={{ height: [4, 16, 4] }}
+                              transition={{ duration: 0.4, delay: i * 0.1, repeat: Infinity }}
+                              className="w-1 bg-indigo-500 rounded-full"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Meeting Controls */}
+            <div className="p-8 bg-gradient-to-t from-black/80 to-transparent relative">
+              {/* Share Menu */}
+              <AnimatePresence>
+                {showShareMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                    className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 rounded-2xl p-2 shadow-2xl flex gap-2"
+                  >
+                    <button 
+                      onClick={handleShareLink}
+                      className="flex flex-col items-center gap-2 p-4 hover:bg-zinc-800 rounded-xl transition-colors min-w-[100px]"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                        <LinkIcon className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs text-white font-medium">Share Link</span>
+                    </button>
+                    <label className="flex flex-col items-center gap-2 p-4 hover:bg-zinc-800 rounded-xl transition-colors min-w-[100px] cursor-pointer">
+                      <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                        <Plus className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs text-white font-medium">Upload File</span>
+                      <input type="file" className="hidden" onChange={handleShareFile} />
+                    </label>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="max-w-md mx-auto flex items-center justify-center gap-6">
+                <button 
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  className={cn(
+                    "w-14 h-14 rounded-full border transition-all flex items-center justify-center",
+                    showShareMenu ? "bg-indigo-600 border-indigo-500 text-white" : "bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700"
+                  )}
+                  title="Share Resources"
+                >
+                  <Plus className={cn("w-6 h-6 transition-transform", showShareMenu && "rotate-45")} />
+                </button>
+                <button 
+                  onClick={() => setIsMuted(!isMuted)}
+                  className={cn(
+                    "w-14 h-14 rounded-full border transition-all flex items-center justify-center",
+                    isMuted 
+                      ? "bg-red-500/20 border-red-500 text-red-500 hover:bg-red-500/30" 
+                      : "bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700"
+                  )}
+                  title={isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                >
+                  {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                </button>
+                <button 
+                  onClick={toggleVoiceMode}
+                  className="px-8 py-4 bg-red-600 text-white rounded-full font-bold flex items-center gap-3 hover:bg-red-700 transition-all shadow-xl shadow-red-900/20"
+                >
+                  <MicOff className="w-5 h-5" />
+                  End Strategy Session
+                </button>
+                <button 
+                  className="w-14 h-14 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white hover:bg-zinc-700 transition-all"
+                  title="Settings"
+                >
+                  <AlertCircle className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Error Alert Overlay */}
+            {voiceError && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-3 p-4 bg-red-500 text-white rounded-2xl shadow-2xl z-50"
+              >
+                <AlertCircle className="w-5 h-5" />
+                <p className="text-sm font-bold">{voiceError}</p>
+                <button onClick={() => disconnect()} className="ml-4 p-1 hover:bg-white/20 rounded-full">
+                  <X className="w-4 h-4" />
+                </button>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="bg-white border-b border-zinc-200 p-6 flex-shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
@@ -227,14 +611,33 @@ export function Boardroom() {
             </button>
             <div className="flex -space-x-2">
             {team.slice(0, 5).map(agent => (
-              <img
-                key={agent.id}
-                src={agent.avatarUrl}
-                alt={agent.name}
-                className="w-10 h-10 rounded-full border-2 border-white object-cover"
-                referrerPolicy="no-referrer"
-                title={agent.role}
-              />
+              <div key={agent.id} className="relative">
+                <img
+                  src={agent.avatarUrl}
+                  alt={agent.name}
+                  className={cn(
+                    "w-10 h-10 rounded-full border-2 object-cover transition-all duration-300",
+                    activeAgentId === agent.id ? "border-indigo-500 scale-110 z-10 shadow-lg shadow-indigo-500/50" : "border-white"
+                  )}
+                  referrerPolicy="no-referrer"
+                  title={`${agent.name} (${agent.role})`}
+                />
+                {activeAgentId === agent.id && (
+                  <motion.div
+                    layoutId="speaking-indicator"
+                    className="absolute -bottom-1 -right-1 w-4 h-4 bg-indigo-500 rounded-full border-2 border-white flex items-center justify-center shadow-lg"
+                    initial={{ scale: 0 }}
+                    animate={{ 
+                      scale: [1, 1.2, 1],
+                    }}
+                    transition={{
+                      scale: { repeat: Infinity, duration: 1 }
+                    }}
+                  >
+                    <Volume2 className="w-2 h-2 text-white" />
+                  </motion.div>
+                )}
+              </div>
             ))}
             {team.length > 5 && (
               <div className="w-10 h-10 rounded-full border-2 border-white bg-zinc-100 flex items-center justify-center text-xs font-medium text-zinc-600">
@@ -247,80 +650,6 @@ export function Boardroom() {
     </header>
 
       <div className="flex-1 overflow-y-auto p-6 relative">
-        <AnimatePresence>
-          {voiceMode && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="absolute inset-0 z-30 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center"
-            >
-              <div className="max-w-md w-full">
-                <div className="relative mb-12">
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="w-32 h-32 bg-indigo-100 rounded-full flex items-center justify-center mx-auto"
-                  >
-                    <div className="w-24 h-24 bg-indigo-500 rounded-full flex items-center justify-center text-white">
-                      {isConnected ? <Volume2 className="w-12 h-12" /> : <Loader2 className="w-12 h-12 animate-spin" />}
-                    </div>
-                  </motion.div>
-                  {isConnected && (
-                    <motion.div
-                      animate={{ opacity: [0, 1, 0] }}
-                      transition={{ repeat: Infinity, duration: 1.5 }}
-                      className="absolute -top-4 -right-4 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider"
-                    >
-                      Live
-                    </motion.div>
-                  )}
-                </div>
-
-                <h2 className="text-2xl font-bold text-zinc-900 mb-4">
-                  {isConnected ? "Voice Discussion Active" : "Connecting to Boardroom..."}
-                </h2>
-                <p className="text-zinc-600 mb-8">
-                  {isConnected 
-                    ? "The board is listening. You can speak naturally and interrupt at any time." 
-                    : "Preparing the executive team for a voice session."}
-                </p>
-
-                {voiceError && (
-                  <div className="flex items-center gap-2 p-4 bg-red-50 text-red-700 rounded-xl mb-8 text-sm">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <p>{voiceError}</p>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap justify-center gap-4">
-                  {team.map(agent => (
-                    <div key={agent.id} className="flex flex-col items-center gap-2">
-                      <img 
-                        src={agent.avatarUrl} 
-                        alt={agent.name} 
-                        className={cn(
-                          "w-12 h-12 rounded-full border-2 transition-all",
-                          isConnected ? "border-indigo-500" : "border-zinc-200 grayscale"
-                        )}
-                        referrerPolicy="no-referrer"
-                      />
-                      <span className="text-[10px] font-medium text-zinc-500">{agent.role.split(' ')[0]}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={toggleVoiceMode}
-                  className="mt-12 px-8 py-3 bg-zinc-900 text-white rounded-full font-medium hover:bg-zinc-800 transition-colors"
-                >
-                  End Voice Session
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <div className="max-w-4xl mx-auto space-y-2">
           {messages.length === 0 && Object.keys(streamingMessages).length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -404,19 +733,29 @@ export function Boardroom() {
                 ))}
               </div>
             )}
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Address the board or paste a link..."
-                disabled={loading}
-                className="w-full bg-zinc-50 border border-zinc-300 rounded-full pl-6 pr-12 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:opacity-50"
-              />
-              <label className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-zinc-400 hover:text-zinc-600 cursor-pointer transition-colors">
-                <input type="file" className="hidden" onChange={handleFileChange} disabled={loading} accept=".txt,.md,.csv,.json" />
-                <Paperclip className="w-5 h-5" />
-              </label>
+            <div className="relative flex-1 flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Address the board or paste a link..."
+                  disabled={loading}
+                  className="w-full bg-zinc-50 border border-zinc-300 rounded-full pl-6 pr-12 py-4 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:opacity-50"
+                />
+                <label className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-zinc-400 hover:text-zinc-600 cursor-pointer transition-colors">
+                  <input type="file" className="hidden" onChange={handleFileChange} disabled={loading} accept=".txt,.md,.csv,.json" />
+                  <Paperclip className="w-5 h-5" />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={toggleVoiceMode}
+                className="w-12 h-12 flex-shrink-0 bg-white border border-zinc-200 text-zinc-600 rounded-full flex items-center justify-center hover:bg-zinc-50 transition-colors shadow-sm"
+                title="Start Voice Discussion"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
             </div>
             <button
               type="submit"

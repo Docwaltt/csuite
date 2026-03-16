@@ -333,9 +333,10 @@ export function useGeminiLive({ company, team, onMessage }: UseGeminiLiveProps) 
 
   const sendText = useCallback((text: string) => {
     if (sessionRef.current && isConnectedRef.current) {
-      // For Live API, we send text as a message part
-      sessionRef.current.sendRealtimeInput({
-        text
+      // For Live API, we send text using sendClientContent
+      sessionRef.current.sendClientContent({
+        turns: text,
+        turnComplete: true
       });
     }
   }, []);

@@ -36,7 +36,13 @@ export function Landing() {
           </div>
           <span className="text-xl font-bold tracking-tight">CSuite</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={handleGetStarted}
+            className="text-sm font-medium text-zinc-400 hover:text-zinc-50 transition-colors"
+          >
+            Login
+          </button>
           <button 
             onClick={handleGetStarted}
             className="px-4 py-2 text-sm font-medium bg-white text-zinc-950 rounded-full hover:bg-zinc-200 transition-colors"
@@ -79,6 +85,7 @@ export function Landing() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
+          className="flex flex-col items-center gap-4"
         >
           <button 
             onClick={handleGetStarted}
@@ -86,6 +93,12 @@ export function Landing() {
           >
             Assemble Your Team
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          </button>
+          <button 
+            onClick={handleGetStarted}
+            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Already have an account? <span className="underline underline-offset-4">Log in</span>
           </button>
         </motion.div>
 

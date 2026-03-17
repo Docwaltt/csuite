@@ -142,6 +142,9 @@ export async function chatWithBoardStream(
 
   const prompt = `Chat History:\\n${chatHistoryText}\\n\\nFounder: ${userMessage}\\n\\nWhich agents should respond? Return a JSON array of strings (agent IDs).`;
 
+  const hasUrl = /https?:\/\/[^\s]+/.test(prompt);
+  const toolsConfig = hasUrl ? [{ urlContext: {} }] : undefined;
+
   let selectedAgents: string[] = [];
   try {
     const response = await ai.models.generateContent({
@@ -154,7 +157,7 @@ export async function chatWithBoardStream(
           type: Type.ARRAY,
           items: { type: Type.STRING }
         },
-        tools: [{ urlContext: {} }]
+        ...(toolsConfig && { tools: toolsConfig })
       }
     });
 
@@ -209,7 +212,7 @@ export async function chatWithBoardStream(
         model: "gemini-3-flash-preview",
         contents: agentPrompt,
         config: {
-          tools: [{ urlContext: {} }]
+          ...(toolsConfig && { tools: toolsConfig })
         }
       });
 

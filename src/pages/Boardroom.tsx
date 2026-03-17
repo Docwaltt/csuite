@@ -233,19 +233,17 @@ export function Boardroom() {
           });
         },
         (agentId, fullText) => {
-          setStreamingMessages(prev => {
-            const timestamp = prev[agentId]?.timestamp || Date.now();
-            
-            if (fullText.trim()) {
-              addMessage({
-                id: uuidv4(),
-                companyId: company.id,
-                senderId: agentId,
-                text: fullText,
-                timestamp: timestamp
-              });
-            }
+          if (fullText.trim()) {
+            addMessage({
+              id: uuidv4(),
+              companyId: company.id,
+              senderId: agentId,
+              text: fullText,
+              timestamp: Date.now()
+            });
+          }
 
+          setStreamingMessages(prev => {
             const next = { ...prev };
             delete next[agentId];
             return next;

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import { Agent, CompanyContext, Message, Task, Goal } from './types';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc, orderBy, getDoc } from 'firebase/firestore';
 
 interface CSuiteContextType {
   user: User | null;
@@ -115,7 +115,14 @@ export function CSuiteProvider({ children }: { children: ReactNode }) {
   const addMessage = async (message: Message) => {
     if (!company?.id) return;
     try {
-      await setDoc(doc(db, `companies/${company.id}/messages`, message.id), message);
+      // Check if message already exists
+      const msgRef = doc(db, `companies/${company.id}/messages`, message.id);
+      const msgSnap = await getDoc(msgRef);
+      if (msgSnap.exists()) {
+        console.warn("Message already exists, skipping:", message.id);
+        return;
+      }
+      await setDoc(msgRef, message);
     } catch (error) {
       console.error("Error adding message:", error);
     }

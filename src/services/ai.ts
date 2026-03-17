@@ -135,10 +135,10 @@ export async function chatWithBoardStream(
   2. Return a JSON array of their agent IDs in the order they should speak.
   `;
 
-  const chatHistoryText = history.map(msg => {
+  const chatHistoryText = history.slice(-10).map(msg => {
     const sender = msg.senderId === 'user' ? 'Founder' : team.find(a => a.id === msg.senderId)?.name || msg.senderId;
     return `${sender}: ${msg.text}`;
-  }).join("\\n\\n");
+  }).join("\n\n");
 
   const prompt = `Chat History:\\n${chatHistoryText}\\n\\nFounder: ${userMessage}\\n\\nWhich agents should respond? Return a JSON array of strings (agent IDs).`;
 
@@ -172,8 +172,8 @@ export async function chatWithBoardStream(
     selectedAgents = [team[0]?.id].filter(Boolean);
   }
 
-  // Ensure valid agents
-  selectedAgents = selectedAgents.filter(id => team.some(a => a.id === id)).slice(0, 3);
+  // Ensure valid agents and remove duplicates
+  selectedAgents = Array.from(new Set(selectedAgents.filter(id => team.some(a => a.id === id)))).slice(0, 3);
   if (selectedAgents.length === 0 && team.length > 0) {
     selectedAgents = [team[0].id];
   }

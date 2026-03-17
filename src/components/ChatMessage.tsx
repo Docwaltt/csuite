@@ -2,7 +2,7 @@ import React from 'react';
 import { Message, Agent } from '../types';
 import Markdown from 'react-markdown';
 import { cn } from './Layout';
-import { motion, PanInfo } from 'motion/react';
+import { motion } from 'motion/react';
 
 interface ChatMessageProps {
   message: Message;
@@ -14,17 +14,8 @@ interface ChatMessageProps {
 export function ChatMessage({ message, agent, onReply, onEdit }: ChatMessageProps) {
   const isUser = message.senderId === 'user';
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
-    if (info.offset.x > 100) {
-      onReply?.(message);
-    }
-  };
-
   return (
     <motion.div
-      drag="x"
-      dragConstraints={{ left: 0, right: 150 }}
-      onDragEnd={handleDragEnd}
       className={cn("flex w-full gap-4 py-4 group", isUser ? "justify-end" : "justify-start")}
     >
       {!isUser && (
